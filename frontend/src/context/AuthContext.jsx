@@ -1,40 +1,55 @@
 // src/context/AuthContext.jsx
 import { createContext, useContext, useState, useEffect, useCallback } from "react";
-import { api, getToken, getUser, setToken, setUser, clearToken, clearUser } from "../api/config";
+// Pointing directly to your clean src/config.js file
+import api from "../config"; 
 
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
-  const [user, setUserState] = useState(getUser);
-  const [loading, setLoading] = useState(!!getToken()); // verify token on mount
+  // Safe initialization checks using localStorage directly since config is just the API client
+  const [user, setUserState] = useState(() => {
+    try {
+      const saved = localStorage.getItem("ncc_user");
+      return saved ? JSON.parse(saved) : null;
+    } catch { return null; }
+  });
+  const [loading, setLoading] = useState(!!localStorage.getItem("ncc_token"));
 
-  // On mount, re-verify token with backend if one exists
   useEffect(() => {
-    if (!getToken()) { setLoading(false); return; }
-    api.auth.me()
-      .then((data) => {
-        const u = data.user || data;
+    const token = localStorage.getItem("ncc_token");
+    if (!token) { setLoading(false); return; }
+    
+    // Check current user details from backend
+    api.get("/auth/me")
+      .then((res) => {
+        const u = res.data?.user || res.data;
         setUserState(u);
-        setUser(u);
+        localStorage.setItem("ncc_user", JSON.stringify(u));
       })
-      .catch(() => { clearToken(); clearUser(); setUserState(null); })
+      .catch(() => {
+        localStorage.removeItem("ncc_token");
+        localStorage.removeItem("ncc_user");
+        setUserState(null);
+      })
       .finally(() => setLoading(false));
   }, []);
 
   const login = useCallback(async (credentials) => {
-    const data = await api.auth.login(credentials);
+    const res = await api.post("/auth/login", credentials);
+    const data = res.data;
     const token = data.token || data.access_token;
     const u = data.user || data;
-    if (token) setToken(token);
-    setUser(u);
+    
+    if (token) localStorage.setItem("ncc_token", token);
+    localStorage.setItem("ncc_user", JSON.stringify(u));
     setUserState(u);
     return u;
   }, []);
 
   const logout = useCallback(async () => {
-    try { await api.auth.logout(); } catch { /* ignore */ }
-    clearToken();
-    clearUser();
+    try { await api.post("/auth/logout"); } catch { /* ignore */ }
+    localStorage.removeItem("ncc_token");
+    localStorage.removeItem("ncc_user");
     setUserState(null);
   }, []);
 
