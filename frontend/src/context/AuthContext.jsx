@@ -1,7 +1,7 @@
 // src/context/AuthContext.jsx
 import { createContext, useContext, useState, useEffect, useCallback } from "react";
 // Pointing directly to your clean src/config.js file
-import api from "../config"; 
+import { api } from "../config"; 
 
 const AuthContext = createContext(null);
 
