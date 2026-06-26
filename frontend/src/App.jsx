@@ -3,7 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { AuthProvider } from './context/AuthContext';
 import Layout from './components/Layout';
 
-// Import all your pages from the sidebar
+// Import pages
 import Login from './pages/Login';
 import AdminDashboard from './pages/AdminDashboard';
 import CadetDashboard from './pages/CadetDashboard';
@@ -15,14 +15,14 @@ import Reports from './pages/Reports';
 
 function App() {
   return (
-    <Router>
-      <AuthProvider>
+    <AuthProvider> {/* Kept at the absolute top so everything can see auth */}
+      <Router>
         <Routes>
           {/* Public Route */}
           <Route path="/login" element={<Login />} />
           <Route path="/" element={<Navigate to="/login" replace />} />
 
-          {/* Core App Routes wrapped inside your shared Layout component */}
+          {/* Protected Routes inside Layout */}
           <Route element={<Layout />}>
             <Route path="/admin-dashboard" element={<AdminDashboard />} />
             <Route path="/cadet-dashboard" element={<CadetDashboard />} />
@@ -33,8 +33,8 @@ function App() {
             <Route path="/reports" element={<Reports />} />
           </Route>
         </Routes>
-      </AuthProvider>
-    </Router>
+      </Router>
+    </AuthProvider>
   );
 }
 
