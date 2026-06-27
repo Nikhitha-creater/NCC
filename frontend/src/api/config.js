@@ -3,7 +3,9 @@
 // Central API layer - Safe Hybrid Mock & Live Pipeline
 // -----------------------------------------------------------------
 
-export const API_BASE_URL = "https://ncc-backend.vercel.app/api/v1"; 
+// FIXED: Changed from hardcoded Vercel to a relative route.
+// This ensures requests pass through Netlify's proxy to your Render server.
+export const API_BASE_URL = "/api/v1"; 
 
 // Token storage key configurations
 export const getToken = () => localStorage.getItem("ncc_portal_token");
@@ -32,15 +34,13 @@ async function request(path, options = {}) {
   try {
     const res = await fetch(`${API_BASE_URL}${path}`, { ...options, headers });
 
-    // REMOVED THE AGGRESSIVE RE-DIRECT WINDOW LOOP LOGIC FROM HERE
     if (!res.ok) {
       throw new Error(`HTTP Error Status: ${res.status}`);
     }
 
     return await res.json().catch(() => ({}));
   } catch (err) {
-    // Intercepting network drops gracefully to process safe fallbacks rather than freezing
-    console.warn(`[NETWORK CORRECTION] Endpoint ${path} not ready on remote server cloud. Supplying sandbox dataset registry layer.`);
+    console.warn(`[NETWORK CORRECTION] Endpoint ${path} fallback invoked. Supplying sandbox dataset registry layer.`);
     throw err; 
   }
 }
