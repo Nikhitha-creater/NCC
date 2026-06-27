@@ -1,6 +1,6 @@
 // frontend/src/context/AuthContext.jsx
 import { createContext, useContext, useState, useEffect } from "react";
-import { api, getToken, setToken, clearToken, getUser, setUser, clearUser } from "../api/config";
+import { api, getToken, setToken, clearToken, getUser, setUser, clearUser } from "../api/config.js";
 
 const AuthContext = createContext(null);
 
