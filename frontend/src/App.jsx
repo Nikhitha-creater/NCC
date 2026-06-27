@@ -13,7 +13,6 @@ import ParadeSchedule from './pages/ParadeSchedule';
 import Reports from './pages/Reports';
 
 // ── PROTECTED ROUTE GUARD ──────────────────────────────────────────────────
-// Ensures unauthenticated users are forced back to the login screen cleanly.
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth();
 
@@ -50,20 +49,30 @@ function AppContent() {
 
         {/* Protected Routes inside Layout Wrapper */}
         <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
-          {/* Match both common variations of the cadet pathway to stop blank page routing */}
+          
+          {/* Dashboard Path Variations */}
           <Route path="/cadet" element={<CadetDashboard />} />
           <Route path="/cadet-dashboard" element={<CadetDashboard />} />
-          
           <Route path="/admin-dashboard" element={<AdminDashboard />} />
+          
+          {/* Attendance Path Variations (Catches all potential sidebar link styles) */}
           <Route path="/attendance" element={<CadetAttendance />} />
+          <Route path="/my-attendance" element={<CadetAttendance />} />
+          <Route path="/cadet-attendance" element={<CadetAttendance />} />
+          
+          {/* Schedule Path Variations */}
+          <Route path="/schedule" element={<ParadeSchedule />} />
+          <Route path="/parade-schedule" element={<ParadeSchedule />} />
+          <Route path="/parades" element={<ParadeSchedule />} />
+          
+          {/* Core Feature Management Paths */}
           <Route path="/profiles" element={<CadetProfiles />} />
           <Route path="/mark-attendance" element={<MarkAttendance />} />
-          <Route path="/schedule" element={<ParadeSchedule />} />
           <Route path="/reports" element={<Reports />} />
         </Route>
 
-        {/* Catch-all Route: If path doesn't exist, redirect safely to login */}
-        <Route path="*" element={<Navigate to="/login" replace />} />
+        {/* Safe Catch-all: Bounces unmapped roots safely to dashboard instead of login */}
+        <Route path="*" element={<Navigate to="/cadet-dashboard" replace />} />
       </Routes>
     </Router>
   );
