@@ -1,12 +1,12 @@
 "use strict";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// NCC Portal — Express Backend (Vercel Serverless + local dev)
+// NCC Portal — Express Backend (Render Deployment + local dev)
 // ─────────────────────────────────────────────────────────────────────────────
 
 const express = require("express");
 const cors    = require("cors");
-const helmet  = require("helmet"); // FIX 1
+const helmet  = require("helmet"); 
 
 // ── Environment ───────────────────────────────────────────────────────────────
 const NODE_ENV     = process.env.NODE_ENV || "development";
@@ -15,28 +15,39 @@ const DATABASE_URL = process.env.DATABASE_URL;
 if (!DATABASE_URL) {
   console.warn(
     "[NCC WARN] DATABASE_URL is not set." +
-    " All /api/v1 database routes will return 503 until it is configured." +
-    " Set it under Project → Settings → Environment Variables in Vercel."
+    " All /api/v1 database routes will return 503 until it is configured."
   );
 }
 
-// ── CORS ──────────────────────────────────────────────────────────────────────
-const VERCEL_PREVIEW_RE = /^https:\/\/[a-z0-9][a-z0-9-]*\.vercel\.app$/;
+// ── CORS CONFIGURATION (UPDATED WITH NETLIFY PRODUCTION WHITELIST) ────────────
+// Hardcoding your production domain ensures it is always permitted, regardless of env vars.
+const ALLOWED_ORIGINS = [
+  "https://lucent-manatee-d0af5b.netlify.app"
+];
 
-const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || "")
+// Parse any extra custom origins from the environment configuration panel if present
+const parsedEnvOrigins = (process.env.ALLOWED_ORIGINS || "")
   .split(",")
   .map((o) => o.trim())
   .filter(Boolean);
 
+ALLOWED_ORIGINS.push(...parsedEnvOrigins);
+
+// Include local development ports if not running in a production pipeline
 if (NODE_ENV !== "production") {
   ALLOWED_ORIGINS.push("http://localhost:3000", "http://localhost:5173");
 }
 
 const corsOptions = {
   origin(origin, callback) {
+    // Allow requests with no origin (like mobile apps, curl, or Postman)
     if (!origin) return callback(null, true);
-    if (ALLOWED_ORIGINS.includes(origin)) return callback(null, true);
-    if (VERCEL_PREVIEW_RE.test(origin)) return callback(null, true);
+    
+    if (ALLOWED_ORIGINS.includes(origin)) {
+      return callback(null, true);
+    }
+    
+    // Fallback error generation block
     callback(new Error(`CORS: origin '${origin}' is not permitted`));
   },
   methods:          ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
@@ -52,17 +63,14 @@ function getPool() {
   if (_pool) return _pool;
 
   if (!DATABASE_URL) {
-    throw new Error(
-      "DATABASE_URL is not configured. " +
-      "Add it to Vercel → Project Settings → Environment Variables."
-    );
+    throw new Error("DATABASE_URL is not configured.");
   }
 
   const { Pool } = require("pg");
   _pool = new Pool({
     connectionString: DATABASE_URL,
     ssl: NODE_ENV === "production" ? { rejectUnauthorized: false } : false,
-    max:                    5,
+    max:                     5,
     idleTimeoutMillis:  10_000,
     connectionTimeoutMillis: 5_000,
   });
@@ -132,7 +140,7 @@ router.get("/health", async (_req, res) => {
   });
 });
 
-// ── FIXED: Added Essential Auth Routes for Frontend Sync ───────────────────
+// ── Essential Auth Routes ────────────────────────────────────────────────────
 router.post("/auth/login", async (req, res, next) => {
   try {
     const { email, password } = req.body;
@@ -141,7 +149,6 @@ router.post("/auth/login", async (req, res, next) => {
       return res.status(400).json({ message: "Email and password are required fields." });
     }
 
-    // Direct structural verification fallback mapping
     const mockRole = email.includes("ano") || email.includes("admin") ? "admin" : "cadet";
     
     res.status(200).json({
@@ -273,7 +280,7 @@ router.post("/attendance", async (req, res, next) => {
 
 app.use("/api/v1", router);
 
-// ── FIX 6 — 404 catch-all ────────────────────────────────────────────────────
+// ── 404 catch-all ────────────────────────────────────────────────────
 app.use((req, res) => {
   res.status(404).json({
     message: `Route not found: ${req.method} ${req.path}`,
@@ -281,7 +288,7 @@ app.use((req, res) => {
   });
 });
 
-// ── FIX 7 — Global error handler ─────────────────────────────────────────────
+// ── Global error handler ─────────────────────────────────────────────
 app.use((err, _req, res, _next) => {
   const isCors = err.message?.startsWith("CORS:");
   const status = isCors ? 403 : 500;
@@ -300,7 +307,7 @@ app.use((err, _req, res, _next) => {
   });
 });
 
-// ── Local dev server ──────────────────────────────────────────────────────────
+// ── Local dev server port configuration ───────────────────────────────────────
 if (require.main === module) {
   const PORT = process.env.PORT || 5000;
   app.listen(PORT, () =>
