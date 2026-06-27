@@ -1,36 +1,47 @@
-// frontend/src/context/AuthContext.jsx
 import { createContext, useContext, useState, useEffect } from "react";
-import { api, getToken, setToken, clearToken, getUser, setUser, clearUser } from "../api/config.js";
+import { api } from "../api/config.js"; // Only import the api caller object
 
 const AuthContext = createContext(null);
+
+// Consistent keys used to look up values inside the browser's storage array
+const TOKEN_KEY = "ncc_portal_token";
+const USER_KEY = "ncc_portal_user";
 
 export function AuthProvider({ children }) {
   const [user, setRuntimeUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Re-hydrate user state from localStorage on boot
+  // Re-hydrate user state from localStorage cleanly on boot
   useEffect(() => {
-    const savedUser = getUser();
-    const token = getToken();
-    if (savedUser && token) {
-      setRuntimeUser(savedUser);
-    } else {
-      // Clean up if mismatched states exist
-      clearToken();
-      clearUser();
+    try {
+      const savedToken = localStorage.getItem(TOKEN_KEY);
+      const savedUserStr = localStorage.getItem(USER_KEY);
+
+      if (savedToken && savedUserStr) {
+        const parsedUser = JSON.parse(savedUserStr);
+        setRuntimeUser(parsedUser);
+      } else {
+        localStorage.removeItem(TOKEN_KEY);
+        localStorage.removeItem(USER_KEY);
+      }
+    } catch (err) {
+      console.error("[AUTH HYDRATION ERROR]: Failed parsing session context keys:", err);
+      localStorage.removeItem(TOKEN_KEY);
+      localStorage.removeItem(USER_KEY);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, []);
 
-  // Login handler utilizing your exact api.auth.login wrapper tree
+  // Login handler utilizing clean native window storage mechanics
   const login = async (credentials) => {
     try {
-      // ✅ Using your configured structure instead of calling a broken .post function
       const response = await api.auth.login(credentials);
       
-      if (response && response.token) {
-        setToken(response.token);
-        setUser(response.user);
+      if (response && response.token && response.user) {
+        localStorage.setItem(TOKEN_KEY, response.token);
+        localStorage.setItem(USER_KEY, JSON.stringify(response.user));
+        
         setRuntimeUser(response.user);
         return response.user;
       } else {
@@ -49,8 +60,8 @@ export function AuthProvider({ children }) {
     } catch (err) {
       console.warn("Server-side logout could not resolve:", err);
     } finally {
-      clearToken();
-      clearUser();
+      localStorage.removeItem(TOKEN_KEY);
+      localStorage.removeItem(USER_KEY);
       setRuntimeUser(null);
     }
   };
