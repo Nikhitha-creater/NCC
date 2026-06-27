@@ -20,12 +20,10 @@ if (!DATABASE_URL) {
 }
 
 // ── CORS CONFIGURATION (UPDATED WITH NETLIFY PRODUCTION WHITELIST) ────────────
-// Hardcoding your production domain ensures it is always permitted, regardless of env vars.
 const ALLOWED_ORIGINS = [
   "https://lucent-manatee-d0af5b.netlify.app"
 ];
 
-// Parse any extra custom origins from the environment configuration panel if present
 const parsedEnvOrigins = (process.env.ALLOWED_ORIGINS || "")
   .split(",")
   .map((o) => o.trim())
@@ -33,21 +31,14 @@ const parsedEnvOrigins = (process.env.ALLOWED_ORIGINS || "")
 
 ALLOWED_ORIGINS.push(...parsedEnvOrigins);
 
-// Include local development ports if not running in a production pipeline
 if (NODE_ENV !== "production") {
   ALLOWED_ORIGINS.push("http://localhost:3000", "http://localhost:5173");
 }
 
 const corsOptions = {
   origin(origin, callback) {
-    // Allow requests with no origin (like mobile apps, curl, or Postman)
     if (!origin) return callback(null, true);
-    
-    if (ALLOWED_ORIGINS.includes(origin)) {
-      return callback(null, true);
-    }
-    
-    // Fallback error generation block
+    if (ALLOWED_ORIGINS.includes(origin)) return callback(null, true);
     callback(new Error(`CORS: origin '${origin}' is not permitted`));
   },
   methods:          ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
@@ -115,6 +106,35 @@ app.get("/", (_req, res) => {
   });
 });
 
+// ── STANDALONE FALLBACK ROUTES FOR FRONTEND SYNC ─────────────────────────────
+// These handle incoming requests that completely bypass the /api/v1 path prefix
+app.post("/auth/login", async (req, res, next) => {
+  try {
+    const { email, password } = req.body;
+    
+    if (!email || !password) {
+      return res.status(400).json({ message: "Email and password are required fields." });
+    }
+
+    const mockRole = email.includes("ano") || email.includes("admin") ? "admin" : "cadet";
+    
+    res.status(200).json({
+      token: "secure-jwt-session-token-fallback",
+      user: {
+        email: email,
+        role: mockRole,
+        name: mockRole === "admin" ? "Commanding Officer" : "NCC Cadet"
+      }
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+app.post("/auth/logout", (req, res) => {
+  res.status(200).json({ message: "Logged out from system securely." });
+});
+
 // ── API router ────────────────────────────────────────────────────────────────
 const router = express.Router();
 
@@ -140,17 +160,14 @@ router.get("/health", async (_req, res) => {
   });
 });
 
-// ── Essential Auth Routes ────────────────────────────────────────────────────
+// Router prefixed Auth duplicates
 router.post("/auth/login", async (req, res, next) => {
   try {
     const { email, password } = req.body;
-    
     if (!email || !password) {
       return res.status(400).json({ message: "Email and password are required fields." });
     }
-
     const mockRole = email.includes("ano") || email.includes("admin") ? "admin" : "cadet";
-    
     res.status(200).json({
       token: "secure-jwt-session-token-fallback",
       user: {
@@ -307,7 +324,7 @@ app.use((err, _req, res, _next) => {
   });
 });
 
-// ── Local dev server port configuration ───────────────────────────────────────
+// ── Local dev server ──────────────────────────────────────────────────────────
 if (require.main === module) {
   const PORT = process.env.PORT || 5000;
   app.listen(PORT, () =>
