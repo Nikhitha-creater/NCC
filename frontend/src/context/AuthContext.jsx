@@ -1,67 +1,79 @@
-// src/context/AuthContext.jsx
-import { createContext, useContext, useState, useEffect, useCallback } from "react";
-// Pointing directly to your clean src/config.js file
-import { api } from "../config"; 
+// frontend/src/context/AuthContext.jsx
+import { createContext, useContext, useState, useEffect } from "react";
+import { api, getToken, setToken, clearToken, getUser, setUser, clearUser } from "../api/config";
 
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
-  // Safe initialization checks using localStorage directly since config is just the API client
-  const [user, setUserState] = useState(() => {
-    try {
-      const saved = localStorage.getItem("ncc_user");
-      return saved ? JSON.parse(saved) : null;
-    } catch { return null; }
-  });
-  const [loading, setLoading] = useState(!!localStorage.getItem("ncc_token"));
+  const [user, setRuntimeUser] = useState(null);
+  const [loading, setLoading] = useState(true);
 
+  // Re-hydrate user state from localStorage on boot
   useEffect(() => {
-    const token = localStorage.getItem("ncc_token");
-    if (!token) { setLoading(false); return; }
-    
-    // Check current user details from backend
-    api.get("/auth/me")
-      .then((res) => {
-        const u = res.data?.user || res.data;
-        setUserState(u);
-        localStorage.setItem("ncc_user", JSON.stringify(u));
-      })
-      .catch(() => {
-        localStorage.removeItem("ncc_token");
-        localStorage.removeItem("ncc_user");
-        setUserState(null);
-      })
-      .finally(() => setLoading(false));
+    const savedUser = getUser();
+    const token = getToken();
+    if (savedUser && token) {
+      setRuntimeUser(savedUser);
+    } else {
+      // Clean up if mismatched states exist
+      clearToken();
+      clearUser();
+    }
+    setLoading(false);
   }, []);
 
-  const login = useCallback(async (credentials) => {
-    const res = await api.post("/auth/login", credentials);
-    const data = res.data;
-    const token = data.token || data.access_token;
-    const u = data.user || data;
-    
-    if (token) localStorage.setItem("ncc_token", token);
-    localStorage.setItem("ncc_user", JSON.stringify(u));
-    setUserState(u);
-    return u;
-  }, []);
+  // Login handler utilizing your exact api.auth.login wrapper tree
+  const login = async (credentials) => {
+    try {
+      // ✅ Using your configured structure instead of calling a broken .post function
+      const response = await api.auth.login(credentials);
+      
+      if (response && response.token) {
+        setToken(response.token);
+        setUser(response.user);
+        setRuntimeUser(response.user);
+        return response.user;
+      } else {
+        throw new Error("Invalid server token response structure.");
+      }
+    } catch (error) {
+      console.error("[AUTH CONTEXT ERROR]:", error);
+      throw error;
+    }
+  };
 
-  const logout = useCallback(async () => {
-    try { await api.post("/auth/logout"); } catch { /* ignore */ }
-    localStorage.removeItem("ncc_token");
-    localStorage.removeItem("ncc_user");
-    setUserState(null);
-  }, []);
+  // Logout handler
+  const logout = async () => {
+    try {
+      await api.auth.logout();
+    } catch (err) {
+      console.warn("Server-side logout could not resolve:", err);
+    } finally {
+      clearToken();
+      clearUser();
+      setRuntimeUser(null);
+    }
+  };
+
+  const value = {
+    user,
+    loading,
+    login,
+    logout,
+    isAuthenticated: !!user
+  };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout, isAdmin: user?.role === "admin" || user?.role === "ano" }}>
-      {children}
+    <AuthContext.Provider value={value}>
+      {!loading && children}
     </AuthContext.Provider>
   );
 }
 
-export const useAuth = () => {
-  const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error("useAuth must be used within AuthProvider");
-  return ctx;
-};
+export function useAuth() {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error("useAuth must be used within an AuthProvider");
+  }
+  return context;
+}
