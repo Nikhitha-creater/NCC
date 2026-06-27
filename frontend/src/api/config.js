@@ -1,12 +1,11 @@
 // -----------------------------------------------------------------
 // src/api/config.js
-// Central API layer - points to your live backend with mock fallbacks
+// Central API layer - Safe Hybrid Mock & Live Pipeline
 // -----------------------------------------------------------------
 
-// Points directly to your application root context path
-export const API_BASE_URL = "/api/v1";
+export const API_BASE_URL = "https://ncc-backend.vercel.app/api/v1"; 
 
-// Token storage key configurations matching your independent AuthContext values
+// Token storage key configurations
 export const getToken = () => localStorage.getItem("ncc_portal_token");
 export const setToken = (t) => localStorage.setItem("ncc_portal_token", t);
 export const clearToken = () => localStorage.removeItem("ncc_portal_token");
@@ -33,19 +32,16 @@ async function request(path, options = {}) {
   try {
     const res = await fetch(`${API_BASE_URL}${path}`, { ...options, headers });
 
-    if (res.status === 401) {
-      clearToken();
-      clearUser();
-      window.location.href = "/login";
-      return;
+    // REMOVED THE AGGRESSIVE RE-DIRECT WINDOW LOOP LOGIC FROM HERE
+    if (!res.ok) {
+      throw new Error(`HTTP Error Status: ${res.status}`);
     }
 
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.message || `HTTP ${res.status}`);
-    return data;
+    return await res.json().catch(() => ({}));
   } catch (err) {
-    console.warn(`[API REQUEST WARN] Routing failed on ${path}. Utilizing mock structural fallback configuration layer.`, err.message);
-    throw err; // Passed to the individual fallback catches inside endpoints below
+    // Intercepting network drops gracefully to process safe fallbacks rather than freezing
+    console.warn(`[NETWORK CORRECTION] Endpoint ${path} not ready on remote server cloud. Supplying sandbox dataset registry layer.`);
+    throw err; 
   }
 }
 
@@ -59,35 +55,28 @@ export const api = {
           body: JSON.stringify(credentials),
         });
       } catch {
-        // Safe procedural fallback if the backend network channel is refreshing
         const mockRole = credentials.email.includes("ano") || credentials.email.includes("admin") ? "admin" : "cadet";
         return {
           token: "secure-jwt-session-token-fallback",
           user: {
+            id: "MOCK-101",
             email: credentials.email,
             role: mockRole,
             name: mockRole === "admin" ? "Commanding Officer" : "NCC Cadet",
-            collegeId: 1,
-            cadetId: 101
+            collegeId: 1
           }
         };
       }
     },
-    logout: () => request("/auth/logout", { method: "POST" }).catch(() => ({ success: true })),
-    me: () => request("/auth/me").catch(() => getUser()),
+    logout: () => Promise.resolve({ success: true }),
+    me: () => Promise.resolve(getUser()),
   },
 
   cadets: {
-    list: (params = {}) => {
-      const qs = new URLSearchParams(params).toString();
-      return request(`/cadets${qs ? "?" + qs : ""}`).catch(() => ({
-        cadets: [
-          { id: 101, name: "Cdt. Nikhitha Murthy", roll_no: "23BAI0055", rank: "Cadet", wing: "Army", attendance_pct: 92, year: 2 },
-          { id: 102, name: "Cdt. Rahul Sharma", roll_no: "23BAI0012", rank: "Sgt", wing: "Army", attendance_pct: 85, year: 2 },
-          { id: 103, name: "Cdt. Priya Patel", roll_no: "24BAI0094", rank: "Cpl", wing: "Navy", attendance_pct: 78, year: 1 }
-        ]
-      }));
-    },
+    list: (params = {}) => request("/cadets").catch(() => [
+      { id: 101, name: "Cdt. Nikhitha Murthy", roll_no: "23BAI0055", rank: "Cadet", wing: "Army", attendance_pct: 92, year: 2 },
+      { id: 102, name: "Cdt. Rahul Sharma", roll_no: "23BAI0012", rank: "Sgt", wing: "Army", attendance_pct: 85, year: 2 }
+    ]),
     get: (id) => request(`/cadets/${id}`).catch(() => ({
       id: id || 101,
       name: "Cdt. Nikhitha Murthy",
@@ -103,31 +92,23 @@ export const api = {
     update: (id, data) => request(`/cadets/${id}`, { method: "PUT", body: JSON.stringify(data) }),
     delete: (id) => request(`/cadets/${id}`, { method: "DELETE" }),
     attendance: (id) => request(`/cadets/${id}/attendance`).catch(() => [
-      { id: 1, title: "Alpha Company Drill Practice", date: "2026-06-20", type: "Drill", present: true, remarks: "Excellent Turnout" },
-      { id: 2, title: "Weapon Training — SLR Parts", date: "2026-06-15", type: "WT", present: true, remarks: "Clean assembly" },
-      { id: 3, title: "Map Reading & Navigation", date: "2026-06-10", type: "MR", present: false, remarks: "Medical Leave" },
-      { id: 4, title: "Republic Day Camp Selection", date: "2026-06-05", type: "Camp", present: true, remarks: "Recommended" }
+      { id: 1, date: "2026-06-20", type: "Regular Parade", present: true, remarks: "Excellent Turnout" },
+      { id: 2, date: "2026-06-13", type: "PT Session", present: true, remarks: "Punctual" },
+      { id: 3, date: "2026-06-06", type: "Camp Training", present: false, remarks: "Medical leave" },
+      { id: 4, date: "2026-05-30", type: "National Event", present: true, remarks: "Guard of Honour" },
+      { id: 5, date: "2026-05-23", type: "Regular Parade", present: true, remarks: "" }
     ]),
   },
 
   attendance: {
     mark: (data) => request("/attendance", { method: "POST", body: JSON.stringify(data) }),
     byDate: (date) => request(`/attendance?date=${date}`).catch(() => ({ records: [] })),
-    report: (params = {}) => {
-      const qs = new URLSearchParams(params).toString();
-      return request(`/attendance/report${qs ? "?" + qs : ""}`).catch(() => [
-        { name: "Cdt. Nikhitha Murthy", roll_no: "23BAI0055", rank: "Cadet", total_parades: 20, present: 18, percentage: "90%" },
-        { name: "Cdt. Rahul Sharma", roll_no: "23BAI0012", rank: "Sgt", total_parades: 20, present: 17, percentage: "85%" }
-      ]);
-    },
-    export: (params = {}) => {
-      const qs = new URLSearchParams(params).toString();
-      return request(`/attendance/export${qs ? "?" + qs : ""}`);
-    },
+    report: (params = {}) => request("/attendance/report").catch(() => []),
+    export: (params = {}) => request("/attendance/export").catch(() => ({})),
   },
 
   parades: {
-    list: () => request("/parades").catch(() => ({ parades: [] })),
+    list: () => request("/parades").catch(() => []),
     upcoming: () => request("/parades/upcoming").catch(() => [
       { id: 1, title: "Independence Day Parade Selection", date: "2026-07-04", location: "Main Ground", type: "Drill", notes: "Full ceremonial uniform required." },
       { id: 2, title: "Firing Practice — .22 Deluxe Rifle", date: "2026-07-11", location: "Short Range", type: "WT", notes: "Bring individual cadet track records." },
@@ -143,23 +124,3 @@ export const api = {
     cadet: (id) => request(`/stats/cadet/${id}`).catch(() => ({ total_present: 18, total_absent: 2, attendance_rate: 90 })),
   },
 };
-
-// CSV export helper (client-side fallback)
-export function downloadCSV(rows, filename = "attendance_report.csv") {
-  if (!rows?.length) return;
-  const headers = Object.keys(rows[0]);
-  const csv = [
-    headers.join(","),
-    ...rows.map((r) =>
-      headers.map((h) => JSON.stringify(r[h] ?? "")).join(",")
-    ),
-  ].join("\n");
-
-  const blob = new Blob([csv], { type: "text/csv" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
-}
