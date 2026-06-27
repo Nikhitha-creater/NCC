@@ -1,6 +1,6 @@
 // src/pages/CadetProfiles.jsx
 import { useState, useEffect } from "react";
-import { api } from "../api/config";
+import { api } from "../config";
 import {
   SectionHeader, Badge, Alert, ProgressBar,
   Modal, EmptyState, Spinner, SkeletonRows

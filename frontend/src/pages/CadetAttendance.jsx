@@ -1,6 +1,6 @@
 // src/pages/CadetAttendance.jsx  –  cadet's own attendance log
 import { useState, useEffect } from "react";
-import { api } from "../api/config";
+import { api } from "../config";
 import { useAuth } from "../context/AuthContext";
 import { AttendanceRing, SectionHeader, Badge, Alert, FullPageLoader, EmptyState } from "../components/UI";
 

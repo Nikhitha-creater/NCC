@@ -1,6 +1,6 @@
 // src/pages/ParadeSchedule.jsx – admin parade management
 import { useState, useEffect } from "react";
-import { api } from "../api/config";
+import { api } from "../config";
 import { SectionHeader, Badge, Alert, Modal, Spinner, EmptyState, FullPageLoader, EventCard } from "../components/UI";
 
 const TYPES = ["Regular Parade","Camp Training","National Event","Republic Day Practice","Independence Day Practice","NIC Camp","Annual Training Camp","PT Session"];

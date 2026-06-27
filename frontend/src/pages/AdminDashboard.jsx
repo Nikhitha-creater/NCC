@@ -1,6 +1,6 @@
 // src/pages/AdminDashboard.jsx
 import { useState, useEffect } from "react";
-import { api } from "../api/config";
+import { api } from "../config";
 import {
   StatCard, EventCard, FullPageLoader, Alert,
   SectionHeader, Badge, EmptyState, ProgressBar

@@ -1,6 +1,6 @@
 // src/pages/CadetDashboard.jsx
 import { useState, useEffect } from "react";
-import { api } from "../api/config";
+import { api } from "../config";
 import { useAuth } from "../context/AuthContext";
 import {
   StatCard, AttendanceRing, ProgressBar, PctBadge,

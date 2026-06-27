@@ -1,6 +1,6 @@
 // src/pages/MarkAttendance.jsx
 import { useState, useEffect, useCallback } from "react";
-import { api } from "../api/config";
+import { api } from "../config";
 import {
   Spinner, Alert, SectionHeader, Badge,
   EmptyState, FullPageLoader, SkeletonRows
