@@ -1,2 +1,2 @@
-/api/* https://ncc-backend-qv2r.onrender.com/api/:splat   200
+/api/v1/* https://ncc-backend-qv2r.onrender.com/api/v1/:splat  200
 /* /index.html                                        200
