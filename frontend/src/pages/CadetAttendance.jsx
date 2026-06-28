@@ -1,6 +1,6 @@
 // src/pages/CadetAttendance.jsx  –  cadet's own attendance log
 import { useState, useEffect } from "react";
-import { api } from "../api/config.js"; // ✅ FIXED: Pointed to the correct central api path
+import { api } from "../api/config.js"; // ✅ Centralized api utility instance
 import { useAuth } from "../context/AuthContext";
 import { AttendanceRing, SectionHeader, Badge, Alert, FullPageLoader, EmptyState } from "../components/UI";
 
@@ -19,15 +19,14 @@ export default function CadetAttendance() {
   const [filter, setFilter] = useState("All");
 
   useEffect(() => {
-    // If user layout metadata parameters are missing, default cleanly to mock sets
+    // Gracefully handle missing data or non-existent backend schemas 
     api.cadets.attendance(user?.id || "me")
       .then(res => {
-        // Handle both object payload structures (.records) or raw array returns
         const data = res?.records || (Array.isArray(res) ? res : null);
         setRecords(data || MOCK);
       })
       .catch((err) => {
-        console.warn("[ATTENDANCE VIEW] Fetch error or missing DB schema. Defaulting to system mock states.", err.message);
+        console.warn("[ATTENDANCE VIEW] Fetch error. Defaulting safely to mock state.", err.message);
         setRecords(MOCK);
       })
       .finally(() => setLoading(false));
@@ -41,7 +40,6 @@ export default function CadetAttendance() {
     filter === "Present" ? r.present : !r.present
   );
 
-  // Safe Date parsing framework to guard against corrupted database strings
   const formatDateString = (dateInput) => {
     try {
       const d = new Date(dateInput);
