@@ -9,7 +9,7 @@ const USER_KEY  = "ncc_portal_user";
 // ── BYPASS FLAG ───────────────────────────────────────────────────────────────
 // Set this to `true` while your login page is not yet implemented.
 // Flip it back to `false` once your /login route exists.
-const SKIP_AUTH_GUARD = false;
+const SKIP_AUTH_GUARD = true;
 
 // A placeholder guest user so components that read `user.name` / `user.role`
 // don't crash while the guard is bypassed.
