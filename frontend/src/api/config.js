@@ -44,7 +44,7 @@ export const api = {
   },
 
   cadets: {
-    list:    ()      => request("GET",  "/cadets"),
+    list:    ()       => request("GET",  "/cadets"),
     profile: (id)    => request("GET",  `/cadets/${id || "me"}`),
     update:  (id, d) => request("PUT",  `/cadets/${id}`, d),
   },
@@ -53,6 +53,7 @@ export const api = {
     list:    (params) => request("GET",  `/attendance?${new URLSearchParams(params || {})}`),
     summary: ()       => request("GET",  "/attendance/summary"),
     mark:    (data)   => request("POST", "/attendance/mark", data),
+    report:  (params) => request("GET",  `/attendance/report?${new URLSearchParams(params || {})}`),
   },
 
   parades: {
@@ -68,4 +69,27 @@ export const api = {
   announcements: {
     list:   ()       => request("GET",  "/announcements"),
   },
+};
+
+// ── CSV Export Helper Utility ──────────────────────────────────────────────────
+export const downloadCSV = (rows, filename) => {
+  if (!rows || !rows.length) return;
+  const separator = ",";
+  const keys = Object.keys(rows[0]);
+  const csvContent = [
+    keys.join(separator),
+    ...rows.map(row => keys.map(k => `"${String(row[k] ?? "").replace(/"/g, '""')}"`).join(separator))
+  ].join("\n");
+
+  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+  const link = document.createElement("a");
+  if (link.download !== undefined) {
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    link.setAttribute("download", filename);
+    link.style.visibility = "hidden";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
 };
