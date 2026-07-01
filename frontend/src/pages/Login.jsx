@@ -1,182 +1,205 @@
-// src/pages/Login.jsx
+// src/components/Layout.jsx
+// ─────────────────────────────────────────────────────────────────────────────
+// App shell: sidebar + topbar + page body.
+//
+// KEY AUDIT FIX: This component previously imported useNavigate / useLocation
+// from react-router-dom AND called useAuth() to check isAuthenticated, then
+// redirected to "/login" inside a useEffect.  ALL of that has been removed.
+//
+// Navigation is now 100% prop-driven:
+//   • onNav(viewId)  — called when the user clicks a sidebar link
+//   • onLogout()     — called when the user clicks Sign Out
+//   • activeView     — string controlled by App; used to highlight active link
+//
+// No router imports. No auth checks. No redirects. This component only renders.
+// ─────────────────────────────────────────────────────────────────────────────
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { useAuth } from "../context/AuthContext.jsx";
-import { Spinner, Alert } from "../components/UI";
 
-const DEMO_ACCOUNTS = [
-  { label: "ANO / Admin", role: "admin", email: "ano@ncc.gov.in", password: "admin123" },
-  { label: "Cadet",       role: "cadet", email: "cadet@ncc.gov.in", password: "cadet123" },
+// ── Navigation definitions ────────────────────────────────────────────────────
+const ADMIN_NAV = [
+  { section: "Overview" },
+  { id: "dashboard",       label: "Dashboard",       icon: "⊞" },
+  { section: "Management" },
+  { id: "mark-attendance", label: "Mark Attendance", icon: "✔" },
+  { id: "profiles",        label: "Cadet Profiles",  icon: "👥" },
+  { id: "reports",         label: "Reports",         icon: "📊" },
+  { section: "Events" },
+  { id: "parades",         label: "Parade Schedule", icon: "🎖️" },
 ];
 
-export default function Login() {
-  const navigate = useNavigate();
-  const { login } = useAuth();
+const CADET_NAV = [
+  { section: "My Portal" },
+  { id: "dashboard",    label: "Dashboard",    icon: "⊞" },
+  { id: "my-attendance",label: "My Attendance",icon: "📋" },
+  { id: "schedule",     label: "Schedule",     icon: "📅" },
+];
 
-  const [form, setForm] = useState({ email: "", password: "", role: "cadet" });
-  const [loading, setLoading] = useState(false);
-  const [error, setError]   = useState("");
+// ── Component ─────────────────────────────────────────────────────────────────
+export default function Layout({
+  children,
+  user,
+  activeView,
+  onNav,
+  onLogout,
+  colleges       = [],
+  activeCollege  = null,
+  onCollegeChange,
+  loadingColleges = false,
+}) {
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+  const isAdmin  = user?.role === "admin";
+  const navItems = isAdmin ? ADMIN_NAV : CADET_NAV;
 
-  const handleSubmit = async (e) => {
-    e?.preventDefault();
-    if (!form.email || !form.password) {
-      setError("Please enter your email and password.");
-      return;
-    }
-    setLoading(true);
-    setError("");
-    try {
-      const user = await login({ email: form.email, password: form.password });
-      const role = user?.role || form.role;
-      navigate(role === "admin" || role === "ano" ? "/admin" : "/cadet", { replace: true });
-    } catch (err) {
-      setError(err.message || "Login failed. Please check your credentials.");
-    } finally {
-      setLoading(false);
-    }
-  };
+  const initials = user?.name
+    ? user.name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2)
+    : "NC";
 
-  const fillDemo = (account) => {
-    setForm({ email: account.email, password: account.password, role: account.role });
-    setError("");
+  const handleNav = (id) => {
+    onNav(id);
+    setSidebarOpen(false);   // close drawer on mobile after tap
   };
 
   return (
-    <div className="login-shell">
-      {/* Left decorative panel */}
-      <div className="login-panel-left">
-        <div className="login-logo">🎖️</div>
-        <h1 className="login-heading">National Cadet Corps</h1>
-        <p className="login-tagline">Attendance Management System</p>
+    <div className="app-shell">
 
-        <div className="login-pillars">
-          {[
-            { icon: "🎯", title: "Precision Tracking",   desc: "Real-time attendance across all parade types" },
-            { icon: "🛡️", title: "Secure & Reliable",   desc: "JWT-secured access for cadets and officers" },
-            { icon: "📊", title: "Instant Reports",      desc: "Exportable attendance reports in one click" },
-          ].map(p => (
-            <div className="login-pillar" key={p.title}>
-              <div className="pillar-icon">{p.icon}</div>
-              <div>
-                <div style={{ fontWeight: 600, color: "rgba(255,255,255,.9)", fontSize: 14 }}>{p.title}</div>
-                <div style={{ fontSize: 12.5, color: "rgba(255,255,255,.5)", marginTop: 2 }}>{p.desc}</div>
+      {/* Mobile overlay */}
+      {sidebarOpen && (
+        <div
+          className="sidebar-overlay open"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
+      {/* ── Sidebar ── */}
+      <aside className={`sidebar${sidebarOpen ? " open" : ""}`}>
+
+        {/* Brand */}
+        <div className="sidebar-brand">
+          <div className="sidebar-emblem">🎖️</div>
+          <div>
+            <div className="sidebar-title">NCC Portal</div>
+            <div className="sidebar-subtitle">Attendance System</div>
+          </div>
+        </div>
+
+        {/* User chip */}
+        {user && (
+          <div className="sidebar-user">
+            <div className="sidebar-avatar">{initials}</div>
+            <div>
+              <div className="sidebar-user-name">{user.name}</div>
+              <div className="sidebar-user-role" style={{ textTransform: "capitalize" }}>
+                {user.role || "Cadet"}
               </div>
             </div>
-          ))}
-        </div>
-
-        {/* Decorative rank stripes */}
-        <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 6, display: "flex" }}>
-          {["var(--navy-700)", "var(--gold-500)", "var(--olive-600)", "var(--gold-500)", "var(--navy-700)"].map((c, i) => (
-            <div key={i} style={{ flex: 1, background: c }} />
-          ))}
-        </div>
-      </div>
-
-      {/* Right form panel */}
-      <div className="login-panel-right">
-        <div className="login-form-header">
-          <div className="login-form-title">Sign In</div>
-          <div className="login-form-sub">Access your NCC portal account</div>
-        </div>
-
-        {error && (
-          <Alert type="danger" onDismiss={() => setError("")} >
-            {error}
-          </Alert>
+          </div>
         )}
 
-        <form onSubmit={handleSubmit} style={{ width: "100%", marginTop: error ? 16 : 0 }} noValidate>
-          {/* Role toggle */}
-          <div style={{ display: "flex", gap: 8, marginBottom: 20, background: "var(--slate-100)", borderRadius: "var(--radius-md)", padding: 4 }}>
-            {[{ v: "cadet", label: "Cadet" }, { v: "admin", label: "ANO / Officer" }].map(r => (
+        {/* College selector (only when multiple colleges present) */}
+        {colleges.length > 1 && (
+          <div style={{ padding: "0 16px 12px" }}>
+            <select
+              value={activeCollege || ""}
+              onChange={e => onCollegeChange?.(e.target.value)}
+              disabled={loadingColleges}
+              style={{
+                width: "100%",
+                padding: "6px 10px",
+                borderRadius: 6,
+                border: "1px solid rgba(255,255,255,0.15)",
+                background: "rgba(255,255,255,0.08)",
+                color: "rgba(255,255,255,0.8)",
+                fontSize: 12,
+              }}
+            >
+              {colleges.map(c => (
+                <option key={c.id} value={c.id} style={{ color: "#1e293b" }}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {/* Nav links */}
+        <nav className="sidebar-nav">
+          {navItems.map((item, i) =>
+            item.section ? (
+              <div key={i} className="nav-section-label">{item.section}</div>
+            ) : (
               <button
-                key={r.v} type="button"
-                onClick={() => set("role", r.v)}
-                style={{
-                  flex: 1, padding: "8px 0", border: "none",
-                  borderRadius: "var(--radius-sm)",
-                  fontFamily: "var(--font-body)", fontWeight: 600, fontSize: 13,
-                  cursor: "pointer", transition: "all .15s",
-                  background: form.role === r.v ? "var(--navy-900)" : "transparent",
-                  color: form.role === r.v ? "white" : "var(--slate-600)",
-                  boxShadow: form.role === r.v ? "var(--shadow-sm)" : "none",
-                }}
+                key={item.id}
+                className={`nav-item${activeView === item.id ? " active" : ""}`}
+                onClick={() => handleNav(item.id)}
               >
-                {r.v === "cadet" ? "🎽 " : "🎖️ "}{r.label}
+                <span className="nav-icon">{item.icon}</span>
+                {item.label}
               </button>
-            ))}
-          </div>
+            )
+          )}
+        </nav>
 
-          <div className="form-group">
-            <label className="form-label" htmlFor="email">
-              Email / Service ID <span className="required">*</span>
-            </label>
-            <input
-              id="email" type="email"
-              className="form-input"
-              placeholder="Enter your email"
-              value={form.email}
-              onChange={e => set("email", e.target.value)}
-              autoComplete="username"
-              required
-            />
-          </div>
-
-          <div className="form-group">
-            <label className="form-label" htmlFor="password">
-              Password <span className="required">*</span>
-            </label>
-            <input
-              id="password" type="password"
-              className="form-input"
-              placeholder="Enter your password"
-              value={form.password}
-              onChange={e => set("password", e.target.value)}
-              autoComplete="current-password"
-              required
-            />
-          </div>
-
+        {/* Footer / sign-out */}
+        <div className="sidebar-footer">
           <button
-            type="submit"
-            className="btn btn-primary btn-lg"
-            disabled={loading}
-            style={{ width: "100%", marginTop: 8, justifyContent: "center" }}
+            className="nav-item"
+            onClick={onLogout}
+            style={{ color: "rgba(255,255,255,0.45)" }}
           >
-            {loading ? <><Spinner size="sm" color="white" /> Signing in…</> : "Sign In →"}
+            <span className="nav-icon">⇥</span>
+            Sign Out
           </button>
-        </form>
-
-        <hr className="login-divider" />
-
-        {/* Demo accounts */}
-        <div style={{ width: "100%" }}>
-          <div style={{ fontSize: 11.5, color: "var(--slate-500)", fontWeight: 600, letterSpacing: ".5px", textTransform: "uppercase", marginBottom: 8 }}>
-            Quick Demo Access
-          </div>
-          <div className="demo-pills">
-            {DEMO_ACCOUNTS.map(a => (
-              <button
-                key={a.role}
-                className={`demo-pill demo-pill-${a.role === "admin" ? "admin" : "cadet"}`}
-                onClick={() => fillDemo(a)}
-              >
-                {a.role === "admin" ? "🎖️" : "🎽"} {a.label}
-              </button>
-            ))}
-          </div>
-          <p style={{ fontSize: 11, color: "var(--slate-400)", marginTop: 8 }}>
-            Click to pre-fill credentials, then press Sign In.
-          </p>
         </div>
+      </aside>
 
-        <p style={{ fontSize: 11, color: "var(--slate-400)", marginTop: "auto", paddingTop: 32, textAlign: "center" }}>
-          National Cadet Corps · Attendance Portal v1.0<br />
-          <span style={{ letterSpacing: "1px" }}>UNITY · DISCIPLINE · SELF-SACRIFICE</span>
-        </p>
+      {/* ── Main area ── */}
+      <div className="main-content">
+
+        {/* Topbar */}
+        <header className="topbar">
+          <div className="topbar-left">
+            <button
+              className="hamburger"
+              onClick={() => setSidebarOpen(o => !o)}
+              aria-label="Toggle menu"
+            >
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none"
+                   stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <line x1="3" y1="6"  x2="21" y2="6"  />
+                <line x1="3" y1="12" x2="21" y2="12" />
+                <line x1="3" y1="18" x2="21" y2="18" />
+              </svg>
+            </button>
+            <div className="topbar-title">NCC Attendance Portal</div>
+          </div>
+
+          <div className="topbar-right">
+            <div style={{ textAlign: "right" }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: "var(--navy-900)" }}>
+                {user?.name}
+              </div>
+              <div style={{ fontSize: 11, color: "var(--slate-500)", textTransform: "capitalize" }}>
+                {user?.unit || "NCC Unit"} · {user?.role || "Cadet"}
+              </div>
+            </div>
+            <div
+              className="sidebar-avatar"
+              style={{
+                border: "2px solid var(--navy-200)",
+                color: "var(--navy-700)",
+                background: "var(--navy-50)",
+              }}
+            >
+              {initials}
+            </div>
+          </div>
+        </header>
+
+        {/* Page content */}
+        <main className="page-body">
+          {children}
+        </main>
       </div>
     </div>
   );
