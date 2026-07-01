@@ -1,3 +1,11 @@
+// src/context/AuthContext.jsx
+// ─────────────────────────────────────────────────────────────────────────────
+// Single auth source of truth.
+//
+// SKIP_AUTH_GUARD = true  →  injects GUEST_USER immediately; no localStorage
+//                             check; isAuthenticated is always true.
+//                             Flip to false once your backend & /login exist.
+// ─────────────────────────────────────────────────────────────────────────────
 import { createContext, useContext, useState, useEffect } from "react";
 import { api } from "../api/config.js";
 
@@ -6,27 +14,25 @@ const AuthContext = createContext(null);
 const TOKEN_KEY = "ncc_portal_token";
 const USER_KEY  = "ncc_portal_user";
 
-// ── BYPASS FLAG ───────────────────────────────────────────────────────────────
-// Set this to `true` while your login page is not yet implemented.
-// Flip it back to `false` once your /login route exists.
-const SKIP_AUTH_GUARD = true;
+// ── Dev bypass ────────────────────────────────────────────────────────────────
+const SKIP_AUTH_GUARD = true;   // ← flip to false when login page is ready
 
-// A placeholder guest user so components that read `user.name` / `user.role`
-// don't crash while the guard is bypassed.
 const GUEST_USER = {
-  name:  "Guest Cadet",
+  id:    "guest-001",
+  name:  "NCC Cadet",
   role:  "cadet",
   unit:  "NCC Unit",
-  email: "guest@ncc.local",
+  email: "cadet@ncc.local",
+  regNo: "NCC/TN/VIT/2023/0047",
+  battalion: "7 TN BN NCC",
 };
 
+// ── Provider ──────────────────────────────────────────────────────────────────
 export function AuthProvider({ children }) {
   const [user,    setRuntimeUser] = useState(null);
   const [loading, setLoading]     = useState(true);
 
   useEffect(() => {
-    // If bypass is active, skip the whole localStorage check and
-    // immediately inject the guest user so nothing downstream stalls.
     if (SKIP_AUTH_GUARD) {
       setRuntimeUser(GUEST_USER);
       setLoading(false);
@@ -38,8 +44,7 @@ export function AuthProvider({ children }) {
       const savedUserStr = localStorage.getItem(USER_KEY);
 
       if (savedToken && savedUserStr) {
-        const parsedUser = JSON.parse(savedUserStr);
-        setRuntimeUser(parsedUser);
+        setRuntimeUser(JSON.parse(savedUserStr));
       } else {
         localStorage.removeItem(TOKEN_KEY);
         localStorage.removeItem(USER_KEY);
@@ -53,6 +58,7 @@ export function AuthProvider({ children }) {
     }
   }, []);
 
+  // ── login ──────────────────────────────────────────────────────────────────
   const login = async (credentials) => {
     try {
       const response = await api.auth.login(credentials);
@@ -62,22 +68,24 @@ export function AuthProvider({ children }) {
         setRuntimeUser(response.user);
         return response.user;
       }
-      throw new Error("Invalid server token response structure.");
+      throw new Error("Invalid server response structure.");
     } catch (error) {
-      console.error("[AUTH CONTEXT ERROR]:", error);
+      console.error("[AUTH LOGIN ERROR]:", error);
       throw error;
     }
   };
 
+  // ── logout ─────────────────────────────────────────────────────────────────
   const logout = async () => {
     try {
       await api.auth.logout();
     } catch (err) {
-      console.warn("Server-side logout could not resolve:", err);
+      console.warn("[AUTH LOGOUT WARN]:", err);
     } finally {
       localStorage.removeItem(TOKEN_KEY);
       localStorage.removeItem(USER_KEY);
-      setRuntimeUser(SKIP_AUTH_GUARD ? GUEST_USER : null); // stay as guest in bypass mode
+      // In bypass mode stay as guest so the app doesn't crash on sign-out
+      setRuntimeUser(SKIP_AUTH_GUARD ? GUEST_USER : null);
     }
   };
 
@@ -87,19 +95,20 @@ export function AuthProvider({ children }) {
     login,
     logout,
     isAdmin:         user?.role === "admin",
-    isAuthenticated: SKIP_AUTH_GUARD ? true : !!user,  // always true in bypass mode
+    isAuthenticated: SKIP_AUTH_GUARD ? true : !!user,
   };
 
+  // Don't render children until hydration is done (prevents flash redirects)
   return (
     <AuthContext.Provider value={value}>
-      {/* Render children only after hydration resolves — same as before */}
       {!loading && children}
     </AuthContext.Provider>
   );
 }
 
+// ── Hook ──────────────────────────────────────────────────────────────────────
 export function useAuth() {
-  const context = useContext(AuthContext);
-  if (!context) throw new Error("useAuth must be used within an AuthProvider");
-  return context;
+  const ctx = useContext(AuthContext);
+  if (!ctx) throw new Error("useAuth must be used within an AuthProvider");
+  return ctx;
 }
