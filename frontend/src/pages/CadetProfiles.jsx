@@ -1,274 +1,305 @@
 // src/pages/CadetProfiles.jsx
 import { useState, useEffect } from "react";
-import { api } from "../config";
+import { api } from "../api/config.js";
+import { useAuth } from "../context/AuthContext";
 import {
-  SectionHeader, Badge, Alert, ProgressBar,
-  Modal, EmptyState, Spinner, SkeletonRows
+  FullPageLoader,
+  SectionHeader,
+  EmptyState,
+  Badge,
+  Alert,
 } from "../components/UI";
 
-const WINGS  = ["Army", "Air", "Navy"];
-const RANKS  = ["Cadet", "Lance Corporal", "Corporal", "Sergeant", "Under Officer", "SUO"];
-const YEARS  = ["1st Year", "2nd Year", "3rd Year"];
+// ── MOCK PROFILE ──────────────────────────────────────────────────────────────
+const MOCK_PROFILE = {
+  regNo: "NCC/TN/VIT/2023/0047",
+  name: "Cadet R. Arjun Kumar",
+  dob: "2004-03-14",
+  battalion: "7 TN BN NCC",
+  unit: "VIT Vellore NCC Unit",
+  wing: "Army Wing – Senior Division (SD)",
+  rank: "Lance Corporal",
+  rankSince: "2025-01-15",
+  enrolledDate: "2023-08-10",
+  bloodGroup: "O+",
+  idNo: "ANO/VIT/2023-47",
+  anoName: "Lt Col S. Krishnamurthy (Retd)",
+  contactEmail: "arjun.kumar@vit.ac.in",
+  contactPhone: "+91-98765-43210",
+  certificates: [
+    { level: "A Certificate", status: "Cleared", year: 2024, grade: "Good" },
+    { level: "B Certificate", status: "Eligible", year: 2025, grade: "—" },
+  ],
+  camps: [
+    {
+      id: 1,
+      name: "Annual Training Camp (ATC)",
+      year: 2024,
+      location: "NCC Training Centre, Pune",
+      duration: "10 days",
+      grade: "Good",
+      achievements: "Best Cadet (Drill) – Runner Up",
+    },
+    {
+      id: 2,
+      name: "Combined Annual Training Camp (CATC)",
+      year: 2024,
+      location: "Air Force Station, Tambaram",
+      duration: "7 days",
+      grade: "Satisfactory",
+      achievements: "",
+    },
+    {
+      id: 3,
+      name: "Rock Climbing & Adventure Camp",
+      year: 2023,
+      location: "Yercaud Hills, Salem",
+      duration: "5 days",
+      grade: "Good",
+      achievements: "Completed Grade II Rock Climb",
+    },
+  ],
+  serviceRemarks: [
+    { date: "2025-01-15", remark: "Promoted to Lance Corporal for exemplary conduct and drill performance." },
+    { date: "2024-11-20", remark: "Represented unit at State Level NCC Day parade." },
+    { date: "2024-08-15", remark: "Participated in Independence Day parade at district level." },
+  ],
+};
 
-const EMPTY_FORM = { name: "", roll_no: "", rank: "Cadet", wing: "Army", year: "1st Year", email: "", phone: "" };
+// ── HELPERS ───────────────────────────────────────────────────────────────────
+function formatDate(dateStr) {
+  const d = new Date(dateStr);
+  return isNaN(d) ? "—" : d.toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" });
+}
 
-const MOCK = Array.from({ length: 12 }, (_, i) => ({
-  id: `c${i+1}`,
-  name: ["Arjun Kumar","Priya Nair","Vikram Singh","Divya Rao","Suresh Patil","Anita Sharma",
-         "Rahul Verma","Kavitha Reddy","Mohan Das","Shreya Joshi","Aditya Patel","Meena K"][i],
-  rank: ["Cadet","Cadet","Lance Corporal","Cadet","Corporal","Cadet","Lance Corporal","Cadet","Sergeant","Cadet","Cadet","Lance Corporal"][i],
-  roll_no: `KAR2024${String(i+1).padStart(3,"0")}`,
-  wing: ["Army","Army","Air","Army","Navy","Army","Army","Air","Army","Navy","Army","Army"][i],
-  year: ["1st Year","2nd Year","1st Year","2nd Year","3rd Year","1st Year","2nd Year","1st Year","3rd Year","1st Year","2nd Year","3rd Year"][i],
-  attendance_pct: [78,91,55,82,69,95,73,60,88,72,45,80][i],
-  email: `cadet${i+1}@ncc.gov.in`,
-  phone: `9900${String(100000+i).slice(1)}`,
-}));
+function certVariant(status) {
+  return status === "Cleared" ? "success" : status === "Eligible" ? "warning" : "navy";
+}
 
+function gradeVariant(g) {
+  return g === "Good" || g === "Very Good" ? "success" : g === "Satisfactory" ? "warning" : "navy";
+}
+
+// ── SUB-COMPONENTS ────────────────────────────────────────────────────────────
+function InfoRow({ label, value }) {
+  return (
+    <div style={{ display: "flex", gap: 12, padding: "10px 0", borderBottom: "1px solid var(--slate-100)", alignItems: "flex-start" }}>
+      <span style={{ fontSize: 12, color: "var(--slate-400)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", minWidth: 160, paddingTop: 1 }}>
+        {label}
+      </span>
+      <span style={{ fontSize: 14, color: "var(--navy-900)", fontWeight: 500, flex: 1 }}>
+        {value || "—"}
+      </span>
+    </div>
+  );
+}
+
+function SectionCard({ title, icon, children }) {
+  return (
+    <div className="card" style={{ padding: "22px 26px" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 18 }}>
+        <span style={{ fontSize: 20 }}>{icon}</span>
+        <span style={{ fontSize: 14, fontWeight: 700, color: "var(--navy-800)", textTransform: "uppercase", letterSpacing: "0.08em" }}>{title}</span>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+// ── COMPONENT ─────────────────────────────────────────────────────────────────
 export default function CadetProfiles() {
-  const [cadets,   setCadets]   = useState([]);
-  const [loading,  setLoading]  = useState(true);
-  const [filter,   setFilter]   = useState("");
-  const [wingF,    setWingF]    = useState("All");
-  const [rankF,    setRankF]    = useState("All");
-  const [modal,    setModal]    = useState(null);  // null | "add" | "edit" | "view"
-  const [selected, setSelected] = useState(null);
-  const [form,     setForm]     = useState(EMPTY_FORM);
-  const [saving,   setSaving]   = useState(false);
-  const [alert,    setAlert]    = useState(null);  // { type, msg }
+  const { user } = useAuth();
 
-  const load = async () => {
-    try {
-      const res = await api.cadets.list();
-      setCadets(res?.cadets || res || MOCK);
-    } catch { setCadets(MOCK); }
-    finally { setLoading(false); }
-  };
+  const [profile, setProfile] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error,   setError]   = useState(null);
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    setLoading(true);
+    api.cadets?.profile?.()
+      .then((res) => {
+        setProfile(res || MOCK_PROFILE);
+      })
+      .catch((err) => {
+        console.warn("[CadetProfiles] API unavailable, using mock data:", err);
+        setProfile(MOCK_PROFILE);
+      })
+      .finally(() => setLoading(false));
+  }, []);
 
-  const filtered = cadets.filter(c => {
-    const q = filter.toLowerCase();
-    const matchQ = !q || c.name.toLowerCase().includes(q) || c.roll_no?.toLowerCase().includes(q);
-    const matchW  = wingF === "All" || c.wing === wingF;
-    const matchR  = rankF === "All" || c.rank === rankF;
-    return matchQ && matchW && matchR;
-  });
-
-  const openAdd  = () => { setForm(EMPTY_FORM); setModal("add"); };
-  const openEdit = (c) => { setSelected(c); setForm({ ...c }); setModal("edit"); };
-  const openView = (c) => { setSelected(c); setModal("view"); };
-  const closeModal = () => { setModal(null); setSelected(null); };
-
-  const setF = (k, v) => setForm(f => ({ ...f, [k]: v }));
-
-  const handleSave = async () => {
-    if (!form.name || !form.roll_no) {
-      setAlert({ type: "danger", msg: "Name and Roll Number are required." });
-      return;
-    }
-    setSaving(true);
-    try {
-      if (modal === "add") {
-        const res = await api.cadets.create(form).catch(() => ({ ...form, id: `new_${Date.now()}` }));
-        setCadets(cs => [...cs, res]);
-        setAlert({ type: "success", msg: `${form.name} added to the unit.` });
-      } else {
-        await api.cadets.update(selected.id, form).catch(() => {});
-        setCadets(cs => cs.map(c => c.id === selected.id ? { ...c, ...form } : c));
-        setAlert({ type: "success", msg: `${form.name}'s profile updated.` });
-      }
-      closeModal();
-    } catch (err) {
-      setAlert({ type: "danger", msg: err.message || "Save failed." });
-    } finally { setSaving(false); }
-  };
-
-  const handleDelete = async (c) => {
-    if (!window.confirm(`Remove ${c.name} from the unit? This cannot be undone.`)) return;
-    try {
-      await api.cadets.delete(c.id).catch(() => {});
-      setCadets(cs => cs.filter(x => x.id !== c.id));
-      setAlert({ type: "success", msg: `${c.name} removed from unit.` });
-    } catch { setAlert({ type: "danger", msg: "Delete failed." }); }
-  };
+  if (loading) return <FullPageLoader message="Loading service record…" />;
+  if (!profile) return <EmptyState icon="👤" title="No record found" message="Your service profile is not yet set up. Contact your ANO." />;
 
   return (
-    <div className="animate-fadeIn">
+    <div className="animate-fadeIn" style={{ display: "flex", flexDirection: "column", gap: 22 }}>
+
       <SectionHeader
-        title="Cadet Profiles"
-        subtitle={`${cadets.length} cadets enrolled in the unit`}
-        actions={<button className="btn btn-gold" onClick={openAdd}>＋ Add Cadet</button>}
+        title="Service Record"
+        subtitle="Your official NCC service profile and training history"
       />
 
-      {alert && <Alert type={alert.type} onDismiss={() => setAlert(null)}>{alert.msg}</Alert>}
+      {error && <Alert type="warning" onDismiss={() => setError(null)}>{error}</Alert>}
 
-      {/* Filters */}
-      <div style={{ display: "flex", gap: 10, marginBottom: 16, marginTop: alert ? 16 : 0, flexWrap: "wrap" }}>
-        <input type="text" className="form-input" placeholder="🔍 Search name or roll no…"
-          value={filter} onChange={e => setFilter(e.target.value)} style={{ flex: 1, minWidth: 200 }} />
-        <select className="form-select" value={wingF} onChange={e => setWingF(e.target.value)} style={{ width: 130 }}>
-          <option value="All">All Wings</option>
-          {WINGS.map(w => <option key={w}>{w}</option>)}
-        </select>
-        <select className="form-select" value={rankF} onChange={e => setRankF(e.target.value)} style={{ width: 160 }}>
-          <option value="All">All Ranks</option>
-          {RANKS.map(r => <option key={r}>{r}</option>)}
-        </select>
-      </div>
-
-      <div className="card">
-        <div className="card-header">
-          <span className="card-title">Enrolled Cadets</span>
-          <Badge variant="navy">{filtered.length} / {cadets.length}</Badge>
+      {/* ── Profile Header ── */}
+      <div style={{
+        background: "linear-gradient(135deg, var(--navy-800) 0%, var(--navy-600) 100%)",
+        borderRadius: 14,
+        padding: "24px 28px",
+        display: "flex",
+        gap: 20,
+        alignItems: "center",
+        flexWrap: "wrap",
+      }}>
+        {/* Avatar */}
+        <div style={{
+          width: 72, height: 72, borderRadius: "50%",
+          background: "rgba(255,255,255,0.15)",
+          border: "3px solid rgba(255,255,255,0.3)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          fontSize: 26, fontWeight: 700, color: "#fff",
+          fontFamily: "var(--font-display)", flexShrink: 0,
+        }}>
+          {profile.name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()}
         </div>
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Roll No.</th>
-                <th>Rank</th>
-                <th>Wing</th>
-                <th>Year</th>
-                <th>Attendance</th>
-                <th>Progress</th>
-                <th style={{ textAlign: "right" }}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading
-                ? <SkeletonRows count={8} cols={8} />
-                : filtered.length === 0
-                  ? <tr><td colSpan={8}><EmptyState icon="👥" title="No cadets found" message="Try adjusting your filters." /></td></tr>
-                  : filtered.map(c => (
-                    <tr key={c.id}>
-                      <td style={{ cursor: "pointer" }} onClick={() => openView(c)}>
-                        <div style={{ fontWeight: 600, color: "var(--navy-800)" }}>{c.name}</div>
-                        <div style={{ fontSize: 11, color: "var(--slate-400)" }}>{c.email}</div>
-                      </td>
-                      <td style={{ fontFamily: "monospace", fontSize: 12 }}>{c.roll_no}</td>
-                      <td>
-                        <Badge variant={c.rank === "Sergeant" || c.rank === "Under Officer" || c.rank === "SUO" ? "gold" :
-                          c.rank === "Corporal" || c.rank === "Lance Corporal" ? "navy" : "default"}>
-                          {c.rank}
-                        </Badge>
-                      </td>
-                      <td><Badge variant={c.wing === "Army" ? "olive" : c.wing === "Air" ? "info" : "navy"}>{c.wing}</Badge></td>
-                      <td style={{ color: "var(--slate-500)" }}>{c.year}</td>
-                      <td>
-                        <span style={{
-                          fontWeight: 700, fontSize: 13,
-                          color: (c.attendance_pct||0) >= 75 ? "var(--success)" : (c.attendance_pct||0) >= 60 ? "var(--warning)" : "var(--danger)"
-                        }}>
-                          {c.attendance_pct ?? "—"}%
-                        </span>
-                      </td>
-                      <td style={{ width: 100 }}><ProgressBar value={c.attendance_pct || 0} /></td>
-                      <td>
-                        <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
-                          <button className="btn btn-ghost btn-sm" onClick={() => openEdit(c)}>✏ Edit</button>
-                          <button className="btn btn-danger btn-sm"  onClick={() => handleDelete(c)}>✕</button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-              }
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Add / Edit modal */}
-      {(modal === "add" || modal === "edit") && (
-        <Modal
-          title={modal === "add" ? "Enroll New Cadet" : `Edit – ${selected?.name}`}
-          onClose={closeModal}
-          footer={
-            <>
-              <button className="btn btn-ghost" onClick={closeModal}>Cancel</button>
-              <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
-                {saving ? <><Spinner size="sm" color="white" /> Saving…</> : modal === "add" ? "Enroll Cadet" : "Save Changes"}
-              </button>
-            </>
-          }
-        >
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-            <div className="form-group" style={{ gridColumn: "1/-1", marginBottom: 0 }}>
-              <label className="form-label">Full Name <span className="required">*</span></label>
-              <input type="text" className="form-input" value={form.name} onChange={e => setF("name", e.target.value)} placeholder="Cadet Full Name" />
-            </div>
-            <div className="form-group" style={{ marginBottom: 0 }}>
-              <label className="form-label">Roll Number <span className="required">*</span></label>
-              <input type="text" className="form-input" value={form.roll_no} onChange={e => setF("roll_no", e.target.value)} placeholder="KAR2024001" />
-            </div>
-            <div className="form-group" style={{ marginBottom: 0 }}>
-              <label className="form-label">Year</label>
-              <select className="form-select" value={form.year} onChange={e => setF("year", e.target.value)}>
-                {YEARS.map(y => <option key={y}>{y}</option>)}
-              </select>
-            </div>
-            <div className="form-group" style={{ marginBottom: 0 }}>
-              <label className="form-label">Rank</label>
-              <select className="form-select" value={form.rank} onChange={e => setF("rank", e.target.value)}>
-                {RANKS.map(r => <option key={r}>{r}</option>)}
-              </select>
-            </div>
-            <div className="form-group" style={{ marginBottom: 0 }}>
-              <label className="form-label">Wing</label>
-              <select className="form-select" value={form.wing} onChange={e => setF("wing", e.target.value)}>
-                {WINGS.map(w => <option key={w}>{w}</option>)}
-              </select>
-            </div>
-            <div className="form-group" style={{ marginBottom: 0 }}>
-              <label className="form-label">Email</label>
-              <input type="email" className="form-input" value={form.email} onChange={e => setF("email", e.target.value)} placeholder="cadet@ncc.gov.in" />
-            </div>
-            <div className="form-group" style={{ marginBottom: 0 }}>
-              <label className="form-label">Phone</label>
-              <input type="tel" className="form-input" value={form.phone} onChange={e => setF("phone", e.target.value)} placeholder="9XXXXXXXXX" />
-            </div>
+        <div style={{ flex: 1 }}>
+          <div style={{ color: "rgba(255,255,255,0.6)", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 4 }}>
+            Service Record
           </div>
-        </Modal>
-      )}
+          <div style={{ color: "#fff", fontSize: 20, fontWeight: 700, fontFamily: "var(--font-display)", marginBottom: 4 }}>
+            {profile.name}
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+            <Badge variant="gold">{profile.rank}</Badge>
+            <span style={{ color: "rgba(255,255,255,0.55)", fontSize: 12 }}>{profile.unit}</span>
+          </div>
+        </div>
+        <div style={{ textAlign: "right" }}>
+          <div style={{ color: "rgba(255,255,255,0.5)", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.08em" }}>Reg. No.</div>
+          <div style={{ color: "#fff", fontSize: 13, fontWeight: 600, fontFamily: "monospace", marginTop: 2 }}>{profile.regNo}</div>
+        </div>
+      </div>
 
-      {/* View modal */}
-      {modal === "view" && selected && (
-        <Modal title="Cadet Profile" onClose={closeModal}>
-          <div style={{ display: "flex", gap: 16, alignItems: "center", marginBottom: 20, paddingBottom: 16, borderBottom: "1px solid var(--slate-200)" }}>
-            <div style={{
-              width: 60, height: 60, borderRadius: "50%",
-              background: "var(--navy-100)", color: "var(--navy-800)",
-              display: "flex", alignItems: "center", justifyContent: "center",
-              fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 22, flexShrink: 0,
-              border: "3px solid var(--gold-500)"
+      {/* ── Two-column grid for desktop ── */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 20 }}>
+
+        {/* Personal Details */}
+        <SectionCard title="Personal Details" icon="👤">
+          <InfoRow label="Full Name"    value={profile.name} />
+          <InfoRow label="Date of Birth" value={formatDate(profile.dob)} />
+          <InfoRow label="Blood Group"  value={profile.bloodGroup} />
+          <InfoRow label="Email"        value={profile.contactEmail} />
+          <InfoRow label="Phone"        value={profile.contactPhone} />
+        </SectionCard>
+
+        {/* Service Details */}
+        <SectionCard title="Service Details" icon="🎖️">
+          <InfoRow label="Battalion"     value={profile.battalion} />
+          <InfoRow label="Unit"          value={profile.unit} />
+          <InfoRow label="Wing"          value={profile.wing} />
+          <InfoRow label="Current Rank"  value={profile.rank} />
+          <InfoRow label="Rank Since"    value={formatDate(profile.rankSince)} />
+          <InfoRow label="Enrolled On"   value={formatDate(profile.enrolledDate)} />
+          <InfoRow label="ANO"           value={profile.anoName} />
+        </SectionCard>
+      </div>
+
+      {/* ── Certificate Status ── */}
+      <SectionCard title="Certificate Status" icon="📜">
+        <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
+          {profile.certificates.map((cert, i) => (
+            <div key={i} style={{
+              flex: "1 1 200px",
+              border: "1px solid var(--slate-200)",
+              borderRadius: 10,
+              padding: "16px 20px",
             }}>
-              {selected.name.split(" ").map(n => n[0]).join("").slice(0,2)}
-            </div>
-            <div>
-              <div style={{ fontFamily: "var(--font-display)", fontSize: 20, fontWeight: 700, color: "var(--navy-900)" }}>{selected.name}</div>
-              <div style={{ display: "flex", gap: 6, marginTop: 4, flexWrap: "wrap" }}>
-                <Badge variant={selected.wing === "Army" ? "olive" : selected.wing === "Air" ? "info" : "navy"}>{selected.wing} Wing</Badge>
-                <Badge variant="gold">{selected.rank}</Badge>
-                <Badge variant="navy">{selected.year}</Badge>
+              <div style={{ fontSize: 15, fontWeight: 700, color: "var(--navy-800)", marginBottom: 8 }}>{cert.level}</div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
+                <Badge variant={certVariant(cert.status)}>{cert.status}</Badge>
+                {cert.grade !== "—" && <Badge variant={gradeVariant(cert.grade)}>{cert.grade}</Badge>}
               </div>
+              <div style={{ fontSize: 12, color: "var(--slate-400)" }}>Year: {cert.year}</div>
             </div>
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-            {[
-              ["Roll Number", selected.roll_no],
-              ["Email",       selected.email],
-              ["Phone",       selected.phone],
-              ["Attendance",  `${selected.attendance_pct ?? "—"}%`],
-            ].map(([k, v]) => (
-              <div key={k} style={{ background: "var(--slate-100)", borderRadius: "var(--radius-md)", padding: "10px 14px" }}>
-                <div style={{ fontSize: 10, fontWeight: 700, color: "var(--slate-400)", textTransform: "uppercase", letterSpacing: 1 }}>{k}</div>
-                <div style={{ fontSize: 14, fontWeight: 600, color: "var(--slate-900)", marginTop: 2 }}>{v || "—"}</div>
+          ))}
+        </div>
+      </SectionCard>
+
+      {/* ── Camp Attendance Log ── */}
+      <SectionCard title="Camp Attendance Log" icon="🏕️">
+        {profile.camps.length === 0 ? (
+          <EmptyState icon="🏕️" title="No camps recorded" message="Camp attendance will appear here once data is available." />
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            {profile.camps.map(camp => (
+              <div key={camp.id} style={{
+                border: "1px solid var(--slate-200)",
+                borderRadius: 10,
+                padding: "16px 20px",
+                display: "flex",
+                gap: 16,
+                alignItems: "flex-start",
+                flexWrap: "wrap",
+              }}>
+                {/* Year pill */}
+                <div style={{
+                  background: "var(--navy-50)",
+                  border: "1px solid var(--navy-200)",
+                  borderRadius: 8,
+                  padding: "8px 14px",
+                  textAlign: "center",
+                  minWidth: 52,
+                  flexShrink: 0,
+                }}>
+                  <div style={{ fontSize: 16, fontWeight: 800, color: "var(--navy-800)", fontFamily: "var(--font-display)" }}>{camp.year}</div>
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", marginBottom: 6 }}>
+                    <span style={{ fontSize: 14, fontWeight: 700, color: "var(--navy-900)" }}>{camp.name}</span>
+                    <Badge variant={gradeVariant(camp.grade)}>{camp.grade}</Badge>
+                  </div>
+                  <div style={{ fontSize: 13, color: "var(--slate-500)", marginBottom: camp.achievements ? 8 : 0 }}>
+                    📍 {camp.location} · ⏱ {camp.duration}
+                  </div>
+                  {camp.achievements ? (
+                    <div style={{ fontSize: 12, color: "var(--success)", fontWeight: 600 }}>
+                      🏅 {camp.achievements}
+                    </div>
+                  ) : null}
+                </div>
               </div>
             ))}
           </div>
-        </Modal>
-      )}
+        )}
+      </SectionCard>
+
+      {/* ── Service Remarks / Commendations ── */}
+      <SectionCard title="Service Remarks" icon="📝">
+        {profile.serviceRemarks.length === 0 ? (
+          <EmptyState icon="📝" title="No remarks" message="Service remarks from your officers will appear here." />
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column" }}>
+            {profile.serviceRemarks.map((r, i) => (
+              <div key={i} style={{
+                display: "flex",
+                gap: 16,
+                padding: "12px 0",
+                borderBottom: i < profile.serviceRemarks.length - 1 ? "1px solid var(--slate-100)" : "none",
+              }}>
+                <span style={{
+                  fontSize: 12,
+                  color: "var(--slate-400)",
+                  whiteSpace: "nowrap",
+                  paddingTop: 2,
+                  minWidth: 110,
+                }}>
+                  {formatDate(r.date)}
+                </span>
+                <span style={{ fontSize: 13, color: "var(--slate-700)", lineHeight: 1.6 }}>{r.remark}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </SectionCard>
     </div>
   );
 }
