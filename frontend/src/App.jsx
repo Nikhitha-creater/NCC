@@ -1,109 +1,134 @@
-import React, { useState, useEffect, useCallback } from "react";
+// src/App.jsx
+// ─────────────────────────────────────────────────────────────────────────────
+// Root application shell.
+//
+// Architecture decision: NO React Router.
+// Navigation is handled by a single `activeView` string in state.
+// This eliminates every class of "redirect to /login on tab change" bug
+// because there are no URL routes, no <Navigate>, no useNavigate calls,
+// and no ProtectedRoute wrappers anywhere in the tree.
+//
+// When your backend is ready:
+//  1. Flip SKIP_AUTH_GUARD → false in AuthContext.jsx
+//  2. Restore a proper router if you need deep-linkable URLs
+// ─────────────────────────────────────────────────────────────────────────────
+import { useState, useEffect, useCallback } from "react";
 import { api } from "./api/config.js";
-import { useAuth } from "./context/AuthContext";   
-
+import { useAuth } from "./context/AuthContext";
 import Layout from "./components/Layout";
-import AdminDashboard from "./pages/AdminDashboard";
-import CadetDashboard from "./pages/CadetDashboard";
-import CadetAttendance from "./pages/CadetAttendance";
-import CadetProfiles from "./pages/CadetProfiles";
-import MarkAttendance from "./pages/MarkAttendance";
-import ParadeSchedule from "./pages/ParadeSchedule";
-import Reports from "./pages/Reports";
 
-// ── LOCAL STORAGE ENGINE (college + view only) ────
-const LS = {
-  getCollege() { return localStorage.getItem("ncc_college") || null; },
-  getView()    { return localStorage.getItem("ncc_view")     || "dashboard"; },
-  saveCollege(id) { localStorage.setItem("ncc_college", id || ""); },
-  saveView(v)      { localStorage.setItem("ncc_view", v); },
-  clearView()      { localStorage.setItem("ncc_view", "dashboard"); },
-  clearCollege()  { localStorage.removeItem("ncc_college"); },
-};
+// Pages
+import AdminDashboard   from "./pages/AdminDashboard";
+import CadetDashboard   from "./pages/CadetDashboard";
+import CadetAttendance  from "./pages/CadetAttendance";
+import CadetProfiles    from "./pages/CadetProfiles";
+import MarkAttendance   from "./pages/MarkAttendance";
+import ParadeSchedule   from "./pages/ParadeSchedule";
+import Reports          from "./pages/Reports";
 
+// ── View persistence (localStorage) ──────────────────────────────────────────
+const VIEW_KEY    = "ncc_view";
+const COLLEGE_KEY = "ncc_college";
+
+function getSavedView()    { try { return localStorage.getItem(VIEW_KEY)    || "dashboard"; } catch { return "dashboard"; } }
+function getSavedCollege() { try { return localStorage.getItem(COLLEGE_KEY) || null;        } catch { return null;        } }
+
+// ── App ───────────────────────────────────────────────────────────────────────
 export default function App() {
-  // ── Pull auth state from AuthContext ──────────────────────────────────────
-  const { user: contextUser, logout: authLogout, isAuthenticated, loading } = useAuth();
+  const { user: activeUser, logout: authLogout, isAuthenticated, loading } = useAuth();
 
-  // MOCK USER FALLBACK: If AuthContext hasn't set a user yet because we are bypassing, 
-  // we provide a stable mock user object so the pages don't crash or attempt toxic redirects.
-  const activeUser = contextUser || { name: "Cadet", role: "cadet", email: "cadet@vit.edu" };
-
-  const [activeCollege, setActiveCollegeRaw] = useState(LS.getCollege);
-  const [activeView,    setActiveViewRaw]     = useState(LS.getView);
-  const [colleges,      setColleges]          = useState([]);
+  const [activeView,    setActiveViewRaw]    = useState(getSavedView);
+  const [activeCollege, setActiveCollegeRaw] = useState(getSavedCollege);
+  const [colleges,      setColleges]         = useState([]);
   const [loadingColleges, setLoadingColleges] = useState(false);
 
+  // Persistent view setter
   const setActiveView = useCallback((v) => {
-    LS.saveView(v);
+    try { localStorage.setItem(VIEW_KEY, v); } catch {}
     setActiveViewRaw(v);
   }, []);
 
+  // Persistent college setter
   const setActiveCollege = useCallback((id) => {
-    LS.saveCollege(id);
+    try { localStorage.setItem(COLLEGE_KEY, id || ""); } catch {}
     setActiveCollegeRaw(id);
   }, []);
 
-  // Sync colleges registry 
+  // Sync colleges registry when a user is present
   useEffect(() => {
-    // We always run this since we are providing a mock fallback user
+    if (!activeUser) return;
     setLoadingColleges(true);
-    
-    // Safely attempt the list call, but always supply a graceful placeholder 
-    // so API 401 interceptors don't wreck tab navigation.
+
     api.cadets.list()
       .then(() => {
-        const placeholderColleges = [
-          { id: "1", name: "VIT Vellore (NCC Unit)" },
+        const list = [
+          { id: "1", name: "Vellore Institute of Technology (VIT)" },
           { id: "2", name: "Madras Christian College (MCC)" },
         ];
-        setColleges(placeholderColleges);
-        if (!LS.getCollege()) setActiveCollege(placeholderColleges[0].id);
+        setColleges(list);
+        if (!getSavedCollege()) setActiveCollege(list[0].id);
       })
       .catch((err) => {
-        console.warn("[COLLEGES SYNC BYPASS]: Using frontend mock metadata.", err.message);
+        console.warn("[COLLEGES SYNC] Backend offline, using defaults:", err.message);
         const fallback = [{ id: "1", name: "VIT Vellore (NCC Unit)" }];
         setColleges(fallback);
-        if (!LS.getCollege()) setActiveCollege("1");
+        if (!getSavedCollege()) setActiveCollege(fallback[0].id);
       })
       .finally(() => setLoadingColleges(false));
-  }, [setActiveCollege]);
+  }, [activeUser, setActiveCollege]);
 
-  const handleLogout = useCallback(() => {
-    authLogout();            
-    LS.clearCollege();
-    LS.clearView();
+  // Logout handler
+  const handleLogout = useCallback(async () => {
+    await authLogout();
+    try {
+      localStorage.removeItem(COLLEGE_KEY);
+      localStorage.setItem(VIEW_KEY, "dashboard");
+    } catch {}
     setActiveCollegeRaw(null);
     setActiveViewRaw("dashboard");
   }, [authLogout]);
 
-  // ── Wait for AuthContext hydration before rendering anything ───────────────
+  // ── Wait for AuthContext hydration ────────────────────────────────────────
   if (loading) return null;
 
-  // ── AUTHENTICATION GATE ────────────────────────────────────────────────────
-  // Since SKIP_AUTH_GUARD = true, isAuthenticated is true. If it somehow drops out,
-  // this clean layout handles it gracefully without a crash.
+  // ── Auth gate (bypassed while SKIP_AUTH_GUARD = true) ────────────────────
   if (!isAuthenticated) {
     return (
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100vh", fontFamily: "sans-serif", color: "#334" }}>
-        <p>🔐 Login page coming soon.</p>
+      <div style={{
+        display: "flex", alignItems: "center", justifyContent: "center",
+        minHeight: "100vh", fontFamily: "sans-serif", color: "#334155",
+        flexDirection: "column", gap: 12,
+      }}>
+        <div style={{ fontSize: 40 }}>🔐</div>
+        <p style={{ fontSize: 16, fontWeight: 600 }}>Login page coming soon.</p>
+        <p style={{ fontSize: 13, color: "#94a3b8" }}>
+          Set <code>SKIP_AUTH_GUARD = true</code> in AuthContext.jsx to bypass.
+        </p>
       </div>
     );
   }
 
-  // ── PAGE ROUTER ────────────────────────────────────────────────────────────
-  const renderMainContent = () => {
-    const role = activeUser?.role || "cadet";
+  // ── Page router ───────────────────────────────────────────────────────────
+  const role = activeUser?.role || "cadet";
+
+  const renderPage = () => {
     switch (activeView) {
-      case "dashboard":       return role === "admin" ? <AdminDashboard /> : <CadetDashboard />;
+      case "dashboard":
+        return role === "admin" ? <AdminDashboard /> : <CadetDashboard />;
       case "attendance":
-      case "my-attendance":   return <CadetAttendance />;
-      case "profiles":        return <CadetProfiles />;
-      case "mark-attendance": return <MarkAttendance />;
+      case "my-attendance":
+        return <CadetAttendance />;
+      case "profiles":
+        return <CadetProfiles />;
+      case "mark-attendance":
+        return <MarkAttendance />;
       case "schedule":
-      case "parades":         return <ParadeSchedule />;
-      case "reports":         return <Reports />;
-      default:                return role === "admin" ? <AdminDashboard /> : <CadetDashboard />;
+      case "parades":
+        return <ParadeSchedule />;
+      case "reports":
+        return <Reports />;
+      default:
+        return role === "admin" ? <AdminDashboard /> : <CadetDashboard />;
     }
   };
 
@@ -118,7 +143,7 @@ export default function App() {
       onCollegeChange={setActiveCollege}
       loadingColleges={loadingColleges}
     >
-      {renderMainContent()}
+      {renderPage()}
     </Layout>
   );
 }
