@@ -1,7 +1,7 @@
 // src/pages/Reports.jsx
 import { useState, useEffect } from "react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, Legend } from "recharts";
-import { api, downloadCSV } from "../config";
+import { api, downloadCSV } from "../api/config";
 import {
   SectionHeader, StatCard, Badge, Alert,
   FullPageLoader, ProgressBar, EmptyState
